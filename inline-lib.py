@@ -1,41 +1,67 @@
 import argparse
+import re
 
 
-def init_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--input_file", help="File to transform to YAML inline", required=True)
-    parser.add_argument("-a", "--arguments", help="Arguments to inline script, defaults to none")
-    parser.add_argument("-f", "--fail_on_stderr", help="Fail on standard error")
-    return parser.parse_args()
+def remove_file_extension(file: str):
+    # Check if file type has been given, if so remove.
+    file = re.sub("\.[a-z]+$", '', file)
+    return file
 
 
-def get_header(arguments='', fail_on_stderr='false'):
-    return f"""template:
+class TemplateGenerator:
+    """
+    Methods to generate inline script templates
+    """
+
+    def __init__(self, file_type, input_file_name):
+        self.script_type = file_type
+        self.input_file = input_file_name
+        self.output_file = f"{remove_file_extension(input_file_name)}.yml"
+
+    def get_script_model(self, script_type: str):
+        # Self made switch statement, runs the function given by the 'switcher'
+        switcher = {
+            "python": self.get_python_header
+        }
+        # Get the function from switcher dictionary
+        func = switcher.get(self.script_type, lambda: "Type not implemented")
+        # Execute the function
+        return func()
+
+    def get_python_header(self, arguments='', fail_on_stderr='false'):
+        return f"""template:
 - task: PythonScript@0
   inputs:
     scriptSource: 'inline'
-    arguments: f"{arguments}"
+    arguments: ''
     #pythonInterpreter: '3.5'
     workingDirectory: '$(Build.SourcesDirectory)'
-    failOnStderr: f"{fail_on_stderr}"
+    failOnStderr: 'false'
     script: |
 """
 
+    def write_header(self):
+        fo = open(self.output_file, "a")
+        fo.write(self.get_script_model(self.script_type))
+        fo.close()
+
+    def write_script_content(self):
+        fo = open(self.output_file, "a")
+        with open(self.input_file) as fp:
+            line = fp.readline()
+            while line:
+                line = f"        {line}"
+                fo.write(line)
+                line = fp.readline()
+        fp.close()
+        fo.close()
+
+
+def write_python_template(script_name: str):
+    generator = TemplateGenerator("python", script_name)
+    generator.write_header()
+    generator.write_script_content()
+
 
 if __name__ == "__main__":
-    args = init_args()
-
-    input_file = f"{args.input_file}.py"
-    output_file = f"{args.input_file}.yml"
-    fo = open(output_file, "a")
-    fo.write(get_header())
-
-    with open(input_file) as fp:
-        line = fp.readline()
-        while line:
-            line = f"        {line}"
-            fo.write(line)
-            line = fp.readline()
-
-    fp.close()
-    fo.close()
+    write_python_template("testscript.py")
